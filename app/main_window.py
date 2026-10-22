@@ -1,10 +1,16 @@
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QStackedWidget,
@@ -12,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.scripts_manager import ScriptManager
 from app.style import APP_STYLESHEET
 from app.system_info import get_system_info
 
@@ -31,12 +38,26 @@ class MainWindow(QMainWindow):
         self.system_labels = {}
         self.system_progress_bars = {}
 
+        self.script_manager = ScriptManager(self)
+        self.script_entries = []
+
+        self.script_manager.output_received.connect(
+            self.append_script_output
+        )
+        self.script_manager.error_received.connect(
+            self.append_script_error
+        )
+        self.script_manager.process_finished.connect(
+            self.handle_script_finished
+        )
+        self.script_manager.running_changed.connect(
+            self.handle_script_running_changed
+        )
+
         self.build_interface()
 
-        # Load the initial system readings.
         self.refresh_system_info()
 
-        # Automatically refresh system information every second.
         self.system_refresh_timer = QTimer(self)
         self.system_refresh_timer.setInterval(1000)
         self.system_refresh_timer.timeout.connect(
@@ -155,7 +176,7 @@ class MainWindow(QMainWindow):
         return content
 
     def build_page(self, page_name):
-        """Build a page header and its corresponding content."""
+        """Build a page header and its content."""
 
         page = QWidget()
 
@@ -179,7 +200,7 @@ class MainWindow(QMainWindow):
                 "Organize and launch your applications."
             ),
             "Scripts": (
-                "Access your Python scripts and automation tools."
+                "Discover, run, and monitor your Python scripts."
             ),
             "Cybersecurity": (
                 "Your cybersecurity tools and lab shortcuts."
@@ -207,6 +228,9 @@ class MainWindow(QMainWindow):
 
         elif page_name == "System":
             self.build_system_page(layout)
+
+        elif page_name == "Scripts":
+            self.build_scripts_page(layout)
 
         else:
             self.build_placeholder_page(layout, page_name)
@@ -301,35 +325,16 @@ class MainWindow(QMainWindow):
         metrics_grid.setSpacing(12)
 
         self.add_metric_card(
-            metrics_grid,
-            0,
-            0,
-            "CPU Usage",
-            "cpu_usage",
+            metrics_grid, 0, 0, "CPU Usage", "cpu_usage"
         )
-
         self.add_metric_card(
-            metrics_grid,
-            0,
-            1,
-            "Memory Usage",
-            "ram_usage",
+            metrics_grid, 0, 1, "Memory Usage", "ram_usage"
         )
-
         self.add_metric_card(
-            metrics_grid,
-            1,
-            0,
-            "Disk Usage",
-            "disk_usage",
+            metrics_grid, 1, 0, "Disk Usage", "disk_usage"
         )
-
         self.add_metric_card(
-            metrics_grid,
-            1,
-            1,
-            "System Uptime",
-            "uptime",
+            metrics_grid, 1, 1, "System Uptime", "uptime"
         )
 
         layout.addLayout(metrics_grid)
@@ -343,7 +348,6 @@ class MainWindow(QMainWindow):
 
         details_title = QLabel("System Details")
         details_title.setObjectName("panel_title")
-
         details_layout.addWidget(details_title)
 
         detail_fields = [
@@ -374,7 +378,6 @@ class MainWindow(QMainWindow):
             row.addWidget(value_label, 2)
 
             details_layout.addLayout(row)
-
             self.system_labels[key] = value_label
 
         layout.addWidget(details_panel)
@@ -406,12 +409,332 @@ class MainWindow(QMainWindow):
             progress_bar.setTextVisible(False)
 
             panel_layout.addWidget(progress_bar)
-
             self.system_progress_bars[key] = progress_bar
 
         grid.addWidget(panel, row, column)
-
         self.system_labels[key] = value_label
+
+    def build_scripts_page(self, layout):
+        """Build the script library and execution interface."""
+
+        library_panel = QFrame()
+        library_panel.setObjectName("panel")
+
+        library_layout = QVBoxLayout(library_panel)
+        library_layout.setContentsMargins(16, 16, 16, 16)
+        library_layout.setSpacing(10)
+
+        library_title = QLabel("Script Library")
+        library_title.setObjectName("panel_title")
+        library_layout.addWidget(library_title)
+
+        self.script_search = QLineEdit()
+        self.script_search.setObjectName("script_search")
+        self.script_search.setPlaceholderText("Search scripts...")
+        self.script_search.textChanged.connect(self.filter_scripts)
+        library_layout.addWidget(self.script_search)
+
+        self.script_list = QListWidget()
+        self.script_list.setMinimumHeight(100)
+        self.script_list.currentItemChanged.connect(
+            self.select_script
+        )
+        library_layout.addWidget(self.script_list, 1)
+
+        library_buttons = QHBoxLayout()
+
+        refresh_button = QPushButton("Refresh Library")
+        refresh_button.setObjectName("secondary_button")
+        refresh_button.clicked.connect(self.refresh_script_library)
+
+        library_buttons.addWidget(refresh_button)
+        library_buttons.addStretch()
+
+        library_layout.addLayout(library_buttons)
+        layout.addWidget(library_panel, 2)
+
+        details_panel = QFrame()
+        details_panel.setObjectName("panel")
+
+        details_layout = QVBoxLayout(details_panel)
+        details_layout.setContentsMargins(16, 16, 16, 16)
+        details_layout.setSpacing(8)
+
+        details_title = QLabel("Script Details")
+        details_title.setObjectName("panel_title")
+        details_layout.addWidget(details_title)
+
+        self.selected_script_label = QLabel("No script selected")
+        self.selected_script_label.setObjectName("panel_title")
+        self.selected_script_label.setWordWrap(True)
+        details_layout.addWidget(self.selected_script_label)
+
+        self.script_path_label = QLabel(
+            "Select a script to see its location."
+        )
+        self.script_path_label.setObjectName("muted_text")
+        self.script_path_label.setWordWrap(True)
+        details_layout.addWidget(self.script_path_label)
+
+        self.script_description_label = QLabel(
+            "Choose a script from the library."
+        )
+        self.script_description_label.setObjectName("muted_text")
+        self.script_description_label.setWordWrap(True)
+        details_layout.addWidget(self.script_description_label)
+
+        controls = QHBoxLayout()
+
+        self.run_script_button = QPushButton("Run Script")
+        self.run_script_button.setObjectName("action_button")
+        self.run_script_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        self.run_script_button.clicked.connect(self.run_selected_script)
+
+        self.stop_script_button = QPushButton("Stop Script")
+        self.stop_script_button.setObjectName("danger_button")
+        self.stop_script_button.setEnabled(False)
+        self.stop_script_button.clicked.connect(
+            self.stop_selected_script
+        )
+
+        controls.addWidget(self.run_script_button)
+        controls.addWidget(self.stop_script_button)
+        controls.addStretch()
+
+        details_layout.addLayout(controls)
+
+        self.script_status_label = QLabel("Ready")
+        self.script_status_label.setObjectName("status_text")
+        details_layout.addWidget(self.script_status_label)
+
+        output_title = QLabel("Execution Output")
+        output_title.setObjectName("panel_title")
+        details_layout.addWidget(output_title)
+
+        self.script_output = QPlainTextEdit()
+        self.script_output.setObjectName("script_output")
+        self.script_output.setReadOnly(True)
+        self.script_output.setPlaceholderText(
+            "Script output and errors will appear here."
+        )
+        self.script_output.setMinimumHeight(100)
+        details_layout.addWidget(self.script_output, 1)
+
+        output_buttons = QHBoxLayout()
+
+        clear_output_button = QPushButton("Clear Output")
+        clear_output_button.setObjectName("secondary_button")
+        clear_output_button.clicked.connect(self.script_output.clear)
+
+        output_buttons.addWidget(clear_output_button)
+        output_buttons.addStretch()
+
+        details_layout.addLayout(output_buttons)
+        layout.addWidget(details_panel, 3)
+
+        self.refresh_script_library()
+
+    def refresh_script_library(self):
+        """Reload scripts from the scripts directory."""
+
+        selected_path = None
+        current_item = self.script_list.currentItem()
+
+        if current_item is not None:
+            selected_path = current_item.data(
+                Qt.ItemDataRole.UserRole
+            )
+
+        self.script_list.clear()
+        self.script_entries = self.script_manager.discover_scripts()
+
+        for script in self.script_entries:
+            item = QListWidgetItem(script["name"])
+            item.setData(
+                Qt.ItemDataRole.UserRole,
+                str(script["path"]),
+            )
+            item.setToolTip(script["filename"])
+            self.script_list.addItem(item)
+
+            if str(script["path"]) == selected_path:
+                self.script_list.setCurrentItem(item)
+
+        if self.script_list.count() == 0:
+            self.selected_script_label.setText("No scripts found")
+            self.script_path_label.setText(
+                "Add Python files to the project's scripts folder."
+            )
+            self.script_description_label.setText(
+                "Python files directly inside scripts/ are discovered."
+            )
+            self.run_script_button.setEnabled(False)
+
+        elif self.script_list.currentItem() is None:
+            self.script_list.setCurrentRow(0)
+
+        self.filter_scripts(self.script_search.text())
+
+    def filter_scripts(self, search_text):
+        """Filter visible scripts by name or filename."""
+
+        search_text = search_text.strip().lower()
+
+        for index in range(self.script_list.count()):
+            item = self.script_list.item(index)
+            name = item.text().lower()
+            filename = item.toolTip().lower()
+
+            item.setHidden(
+                search_text not in name
+                and search_text not in filename
+            )
+
+        current_item = self.script_list.currentItem()
+
+        if current_item is not None and current_item.isHidden():
+            self.script_list.setCurrentItem(None)
+
+        if self.script_list.currentItem() is None:
+            for index in range(self.script_list.count()):
+                item = self.script_list.item(index)
+
+                if not item.isHidden():
+                    self.script_list.setCurrentItem(item)
+                    break
+
+    def select_script(self, current_item, previous_item=None):
+        """Display details for the selected script."""
+
+        if current_item is None:
+            self.selected_script_label.setText("No script selected")
+            self.script_path_label.setText(
+                "Select a script from the library."
+            )
+            self.script_description_label.setText("")
+            self.run_script_button.setEnabled(
+                not self.script_manager.is_running()
+            )
+            return
+
+        script_path = current_item.data(Qt.ItemDataRole.UserRole)
+
+        script = next(
+            (
+                entry
+                for entry in self.script_entries
+                if str(entry["path"]) == script_path
+            ),
+            None,
+        )
+
+        if script is None:
+            return
+
+        self.selected_script_label.setText(script["filename"])
+        self.script_path_label.setText(str(script["path"]))
+        self.script_description_label.setText(script["description"])
+
+        self.run_script_button.setEnabled(
+            not self.script_manager.is_running()
+        )
+
+    def run_selected_script(self):
+        """Run the currently selected script."""
+
+        if self.script_manager.is_running():
+            return
+
+        item = self.script_list.currentItem()
+
+        if item is None:
+            QMessageBox.information(
+                self,
+                "No Script Selected",
+                "Select a script before choosing Run Script.",
+            )
+            return
+
+        script_path = item.data(Qt.ItemDataRole.UserRole)
+
+        self.script_output.clear()
+        self.script_status_label.setText("Starting script...")
+
+        self.run_script_button.setEnabled(False)
+        self.stop_script_button.setEnabled(False)
+
+        started = self.script_manager.run_script(script_path)
+
+        if not started:
+            self.script_status_label.setText(
+                "Unable to start script."
+            )
+            self.run_script_button.setEnabled(True)
+
+    def stop_selected_script(self):
+        """Request the running script to stop."""
+
+        if self.script_manager.is_running():
+            self.script_status_label.setText(
+                "Requesting script to stop..."
+            )
+            self.stop_script_button.setEnabled(False)
+            self.script_manager.stop_script()
+
+    def append_script_output(self, output):
+        """Append standard output from a running script."""
+
+        cursor = self.script_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.script_output.setTextCursor(cursor)
+        self.script_output.insertPlainText(output)
+        self.script_output.ensureCursorVisible()
+
+    def append_script_error(self, error_output):
+        """Append standard error from a running script."""
+
+        cursor = self.script_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.script_output.setTextCursor(cursor)
+        self.script_output.insertPlainText(error_output)
+        self.script_output.ensureCursorVisible()
+
+    def handle_script_running_changed(self, is_running):
+        """Update execution controls when the process state changes."""
+
+        self.run_script_button.setEnabled(
+            not is_running
+            and self.script_list.currentItem() is not None
+        )
+        self.stop_script_button.setEnabled(is_running)
+
+        if is_running:
+            self.script_status_label.setText("Running...")
+
+    def handle_script_finished(self, exit_code, succeeded):
+        """Display the final execution result."""
+
+        if succeeded:
+            self.script_status_label.setText(
+                f"Completed successfully (exit code {exit_code})."
+            )
+            self.script_output.appendPlainText(
+                f"\n[Utility Hub] Script completed with exit code {exit_code}."
+            )
+        else:
+            self.script_status_label.setText(
+                f"Failed or stopped (exit code {exit_code})."
+            )
+            self.script_output.appendPlainText(
+                f"\n[Utility Hub] Script exited with code {exit_code}."
+            )
+
+        self.run_script_button.setEnabled(
+            self.script_list.currentItem() is not None
+        )
+        self.stop_script_button.setEnabled(False)
 
     def build_placeholder_page(self, layout, page_name):
         """Build a placeholder for a page not yet implemented."""
@@ -436,42 +759,20 @@ class MainWindow(QMainWindow):
 
         info = get_system_info()
 
-        # CPU usage
         cpu_usage = info["cpu_usage"]
+        self.system_labels["cpu_usage"].setText(f"{cpu_usage:.1f}%")
+        self.system_progress_bars["cpu_usage"].setValue(round(cpu_usage))
 
-        self.system_labels["cpu_usage"].setText(
-            f"{cpu_usage:.1f}%"
-        )
-        self.system_progress_bars["cpu_usage"].setValue(
-            round(cpu_usage)
-        )
-
-        # Memory usage
         ram_usage = info["ram_usage"]
+        self.system_labels["ram_usage"].setText(f"{ram_usage:.1f}%")
+        self.system_progress_bars["ram_usage"].setValue(round(ram_usage))
 
-        self.system_labels["ram_usage"].setText(
-            f"{ram_usage:.1f}%"
-        )
-        self.system_progress_bars["ram_usage"].setValue(
-            round(ram_usage)
-        )
-
-        # Disk usage
         disk_usage = info["disk_usage"]
+        self.system_labels["disk_usage"].setText(f"{disk_usage:.1f}%")
+        self.system_progress_bars["disk_usage"].setValue(round(disk_usage))
 
-        self.system_labels["disk_usage"].setText(
-            f"{disk_usage:.1f}%"
-        )
-        self.system_progress_bars["disk_usage"].setValue(
-            round(disk_usage)
-        )
+        self.system_labels["uptime"].setText(info["uptime"])
 
-        # System uptime
-        self.system_labels["uptime"].setText(
-            info["uptime"]
-        )
-
-        # System details
         detail_values = {
             "computer_name": info["computer_name"],
             "operating_system": info["operating_system"],
