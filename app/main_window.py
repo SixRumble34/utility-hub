@@ -12,132 +12,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.style import APP_STYLESHEET
 from app.system_info import get_system_info
 
 
-APP_STYLESHEET = """
-QMainWindow {
-    background-color: #111827;
-    color: #F9FAFB;
-}
-
-QWidget {
-    color: #F9FAFB;
-    font-family: "Segoe UI";
-    font-size: 10pt;
-}
-
-QFrame#sidebar {
-    background-color: #0B1220;
-    border: none;
-}
-
-QLabel#app_title {
-    font-size: 17pt;
-    font-weight: bold;
-    color: #F9FAFB;
-    padding: 8px;
-}
-
-QLabel#page_title {
-    font-size: 23pt;
-    font-weight: bold;
-    color: #F9FAFB;
-}
-
-QLabel#page_description {
-    color: #9CA3AF;
-    font-size: 10pt;
-}
-
-QPushButton#nav_button {
-    background-color: transparent;
-    color: #D1D5DB;
-    text-align: left;
-    border: none;
-    border-radius: 7px;
-    padding: 11px;
-}
-
-QPushButton#nav_button:hover {
-    background-color: #1F2937;
-}
-
-QPushButton#nav_button:checked {
-    background-color: #1D4ED8;
-    color: white;
-}
-
-QPushButton#settings_button {
-    background-color: #111827;
-    color: #D1D5DB;
-    border: 1px solid #374151;
-    border-radius: 7px;
-    padding: 10px;
-}
-
-QPushButton#settings_button:hover {
-    background-color: #1F2937;
-}
-
-QPushButton#action_button {
-    background-color: #1D4ED8;
-    color: white;
-    border: none;
-    border-radius: 7px;
-    padding: 10px 16px;
-    font-weight: bold;
-}
-
-QPushButton#action_button:hover {
-    background-color: #2563EB;
-}
-
-QFrame#panel {
-    background-color: #1F2937;
-    border: 1px solid #374151;
-    border-radius: 10px;
-}
-
-QLabel#panel_title {
-    font-size: 12pt;
-    font-weight: bold;
-    color: #F9FAFB;
-}
-
-QLabel#metric_value {
-    font-size: 20pt;
-    font-weight: bold;
-    color: #60A5FA;
-}
-
-QLabel#muted_text {
-    color: #9CA3AF;
-}
-
-QProgressBar {
-    background-color: #111827;
-    border: none;
-    border-radius: 4px;
-    height: 9px;
-    text-align: center;
-}
-
-QProgressBar::chunk {
-    background-color: #3B82F6;
-    border-radius: 4px;
-}
-"""
-
-
 class MainWindow(QMainWindow):
-
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("Utility Hub")
         self.resize(1150, 760)
         self.setMinimumSize(850, 600)
+
         self.setStyleSheet(APP_STYLESHEET)
 
         self.navigation_buttons = {}
@@ -147,10 +33,10 @@ class MainWindow(QMainWindow):
 
         self.build_interface()
 
-        # Get the initial readings.
+        # Load the initial system readings.
         self.refresh_system_info()
 
-        # Refresh all system information automatically every second.
+        # Automatically refresh system information every second.
         self.system_refresh_timer = QTimer(self)
         self.system_refresh_timer.setInterval(1000)
         self.system_refresh_timer.timeout.connect(
@@ -159,6 +45,8 @@ class MainWindow(QMainWindow):
         self.system_refresh_timer.start()
 
     def build_interface(self):
+        """Create the main application layout."""
+
         central_widget = QWidget()
 
         main_layout = QHBoxLayout(central_widget)
@@ -176,6 +64,8 @@ class MainWindow(QMainWindow):
         self.show_page("Home")
 
     def build_sidebar(self):
+        """Create the sidebar and navigation buttons."""
+
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(220)
@@ -204,7 +94,9 @@ class MainWindow(QMainWindow):
             button = QPushButton(f"{symbol}   {name}")
             button.setObjectName("nav_button")
             button.setCheckable(True)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
 
             button.clicked.connect(
                 lambda checked=False, page=name: self.show_page(page)
@@ -217,7 +109,10 @@ class MainWindow(QMainWindow):
 
         settings_button = QPushButton("⚙   Settings")
         settings_button.setObjectName("settings_button")
-        settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        settings_button.setCheckable(True)
+        settings_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
 
         settings_button.clicked.connect(
             lambda checked=False: self.show_page("Settings")
@@ -229,7 +124,10 @@ class MainWindow(QMainWindow):
         return sidebar
 
     def build_content_area(self):
+        """Create the stacked pages in the main content area."""
+
         content = QWidget()
+        content.setObjectName("MainContent")
 
         layout = QVBoxLayout(content)
         layout.setContentsMargins(30, 26, 30, 26)
@@ -257,6 +155,8 @@ class MainWindow(QMainWindow):
         return content
 
     def build_page(self, page_name):
+        """Build a page header and its corresponding content."""
+
         page = QWidget()
 
         layout = QVBoxLayout(page)
@@ -275,16 +175,24 @@ class MainWindow(QMainWindow):
             "System": (
                 "View system information and resource usage."
             ),
-            "Applications": "Organize and launch your applications.",
+            "Applications": (
+                "Organize and launch your applications."
+            ),
             "Scripts": (
                 "Access your Python scripts and automation tools."
             ),
             "Cybersecurity": (
                 "Your cybersecurity tools and lab shortcuts."
             ),
-            "My Projects": "Keep your development projects organized.",
-            "Notes": "Your personal notes and quick references.",
-            "Settings": "Customize your Utility Hub experience.",
+            "My Projects": (
+                "Keep your development projects organized."
+            ),
+            "Notes": (
+                "Your personal notes and quick references."
+            ),
+            "Settings": (
+                "Customize your Utility Hub experience."
+            ),
         }
 
         description = QLabel(descriptions[page_name])
@@ -296,8 +204,10 @@ class MainWindow(QMainWindow):
 
         if page_name == "Home":
             self.build_home_page(layout)
+
         elif page_name == "System":
             self.build_system_page(layout)
+
         else:
             self.build_placeholder_page(layout, page_name)
 
@@ -306,6 +216,8 @@ class MainWindow(QMainWindow):
         return page
 
     def build_home_page(self, layout):
+        """Build the Home page quick-access section."""
+
         quick_access_title = QLabel("Quick Access")
         quick_access_title.setObjectName("panel_title")
 
@@ -327,7 +239,9 @@ class MainWindow(QMainWindow):
             button = QPushButton(label)
             button.setObjectName("action_button")
             button.setMinimumHeight(60)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setCursor(
+                Qt.CursorShape.PointingHandCursor
+            )
 
             button.clicked.connect(
                 lambda checked=False, page=target: self.show_page(page)
@@ -341,6 +255,8 @@ class MainWindow(QMainWindow):
         welcome_panel.setObjectName("panel")
 
         welcome_layout = QVBoxLayout(welcome_panel)
+        welcome_layout.setContentsMargins(18, 16, 18, 16)
+        welcome_layout.setSpacing(8)
 
         welcome_title = QLabel("Welcome to Utility Hub")
         welcome_title.setObjectName("panel_title")
@@ -359,9 +275,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(welcome_panel)
 
     def build_system_page(self, layout):
+        """Build the live system monitoring dashboard."""
+
         refresh_row = QHBoxLayout()
 
-        update_status = QLabel("Live monitoring • Updates every second")
+        update_status = QLabel(
+            "Live monitoring • Updates every second"
+        )
         update_status.setObjectName("muted_text")
 
         refresh_row.addWidget(update_status)
@@ -369,8 +289,9 @@ class MainWindow(QMainWindow):
 
         refresh_button = QPushButton("Refresh")
         refresh_button.setObjectName("action_button")
-        refresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
-
+        refresh_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
         refresh_button.clicked.connect(self.refresh_system_info)
 
         refresh_row.addWidget(refresh_button)
@@ -380,16 +301,35 @@ class MainWindow(QMainWindow):
         metrics_grid.setSpacing(12)
 
         self.add_metric_card(
-            metrics_grid, 0, 0, "CPU Usage", "cpu_usage"
+            metrics_grid,
+            0,
+            0,
+            "CPU Usage",
+            "cpu_usage",
         )
+
         self.add_metric_card(
-            metrics_grid, 0, 1, "Memory Usage", "ram_usage"
+            metrics_grid,
+            0,
+            1,
+            "Memory Usage",
+            "ram_usage",
         )
+
         self.add_metric_card(
-            metrics_grid, 1, 0, "Disk Usage", "disk_usage"
+            metrics_grid,
+            1,
+            0,
+            "Disk Usage",
+            "disk_usage",
         )
+
         self.add_metric_card(
-            metrics_grid, 1, 1, "System Uptime", "uptime"
+            metrics_grid,
+            1,
+            1,
+            "System Uptime",
+            "uptime",
         )
 
         layout.addLayout(metrics_grid)
@@ -440,6 +380,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(details_panel)
 
     def add_metric_card(self, grid, row, column, title, key):
+        """Create a reusable system metric card."""
+
         panel = QFrame()
         panel.setObjectName("panel")
 
@@ -472,10 +414,13 @@ class MainWindow(QMainWindow):
         self.system_labels[key] = value_label
 
     def build_placeholder_page(self, layout, page_name):
+        """Build a placeholder for a page not yet implemented."""
+
         panel = QFrame()
         panel.setObjectName("panel")
 
         panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(18, 16, 18, 16)
 
         message = QLabel(
             f"The {page_name} page is ready for future features."
@@ -487,7 +432,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(panel)
 
     def refresh_system_info(self):
-        """Refresh all system metrics and details."""
+        """Refresh system metrics and details."""
 
         info = get_system_info()
 
@@ -549,6 +494,8 @@ class MainWindow(QMainWindow):
             self.system_labels[key].setText(value)
 
     def show_page(self, page_name):
+        """Display a page and update the active navigation button."""
+
         page = self.pages[page_name]
         self.page_stack.setCurrentWidget(page)
 
