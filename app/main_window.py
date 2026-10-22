@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -131,6 +131,7 @@ QProgressBar::chunk {
 
 
 class MainWindow(QMainWindow):
+
     def __init__(self):
         super().__init__()
 
@@ -145,10 +146,21 @@ class MainWindow(QMainWindow):
         self.system_progress_bars = {}
 
         self.build_interface()
+
+        # Get the initial readings.
         self.refresh_system_info()
+
+        # Refresh all system information automatically every second.
+        self.system_refresh_timer = QTimer(self)
+        self.system_refresh_timer.setInterval(1000)
+        self.system_refresh_timer.timeout.connect(
+            self.refresh_system_info
+        )
+        self.system_refresh_timer.start()
 
     def build_interface(self):
         central_widget = QWidget()
+
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -160,6 +172,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(content_area, 1)
 
         self.setCentralWidget(central_widget)
+
         self.show_page("Home")
 
     def build_sidebar(self):
@@ -173,6 +186,7 @@ class MainWindow(QMainWindow):
 
         app_title = QLabel("Utility Hub")
         app_title.setObjectName("app_title")
+
         layout.addWidget(app_title)
         layout.addSpacing(15)
 
@@ -191,6 +205,7 @@ class MainWindow(QMainWindow):
             button.setObjectName("nav_button")
             button.setCheckable(True)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
+
             button.clicked.connect(
                 lambda checked=False, page=name: self.show_page(page)
             )
@@ -203,11 +218,12 @@ class MainWindow(QMainWindow):
         settings_button = QPushButton("⚙   Settings")
         settings_button.setObjectName("settings_button")
         settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
+
         settings_button.clicked.connect(
             lambda checked=False: self.show_page("Settings")
         )
-        layout.addWidget(settings_button)
 
+        layout.addWidget(settings_button)
         self.navigation_buttons["Settings"] = settings_button
 
         return sidebar
@@ -234,6 +250,7 @@ class MainWindow(QMainWindow):
 
         for page_name in page_names:
             page = self.build_page(page_name)
+
             self.pages[page_name] = page
             self.page_stack.addWidget(page)
 
@@ -251,11 +268,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
 
         descriptions = {
-            "Home": "Your personal desktop environment and quick-access workspace.",
-            "System": "View system information and resource usage.",
+            "Home": (
+                "Your personal desktop environment and "
+                "quick-access workspace."
+            ),
+            "System": (
+                "View system information and resource usage."
+            ),
             "Applications": "Organize and launch your applications.",
-            "Scripts": "Access your Python scripts and automation tools.",
-            "Cybersecurity": "Your cybersecurity tools and lab shortcuts.",
+            "Scripts": (
+                "Access your Python scripts and automation tools."
+            ),
+            "Cybersecurity": (
+                "Your cybersecurity tools and lab shortcuts."
+            ),
             "My Projects": "Keep your development projects organized.",
             "Notes": "Your personal notes and quick references.",
             "Settings": "Customize your Utility Hub experience.",
@@ -264,6 +290,7 @@ class MainWindow(QMainWindow):
         description = QLabel(descriptions[page_name])
         description.setObjectName("page_description")
         description.setWordWrap(True)
+
         layout.addWidget(description)
         layout.addSpacing(12)
 
@@ -281,6 +308,7 @@ class MainWindow(QMainWindow):
     def build_home_page(self, layout):
         quick_access_title = QLabel("Quick Access")
         quick_access_title.setObjectName("panel_title")
+
         layout.addWidget(quick_access_title)
 
         quick_access_items = [
@@ -300,6 +328,7 @@ class MainWindow(QMainWindow):
             button.setObjectName("action_button")
             button.setMinimumHeight(60)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
+
             button.clicked.connect(
                 lambda checked=False, page=target: self.show_page(page)
             )
@@ -330,13 +359,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(welcome_panel)
 
     def build_system_page(self, layout):
+        refresh_row = QHBoxLayout()
+
+        update_status = QLabel("Live monitoring • Updates every second")
+        update_status.setObjectName("muted_text")
+
+        refresh_row.addWidget(update_status)
+        refresh_row.addStretch()
+
         refresh_button = QPushButton("Refresh")
         refresh_button.setObjectName("action_button")
         refresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
+
         refresh_button.clicked.connect(self.refresh_system_info)
 
-        refresh_row = QHBoxLayout()
-        refresh_row.addStretch()
         refresh_row.addWidget(refresh_button)
         layout.addLayout(refresh_row)
 
@@ -344,16 +380,16 @@ class MainWindow(QMainWindow):
         metrics_grid.setSpacing(12)
 
         self.add_metric_card(
-            metrics_grid, 0, 0, "CPU Usage", "cpu_usage", "%"
+            metrics_grid, 0, 0, "CPU Usage", "cpu_usage"
         )
         self.add_metric_card(
-            metrics_grid, 0, 1, "Memory Usage", "ram_usage", "%"
+            metrics_grid, 0, 1, "Memory Usage", "ram_usage"
         )
         self.add_metric_card(
-            metrics_grid, 1, 0, "Disk Usage", "disk_usage", "%"
+            metrics_grid, 1, 0, "Disk Usage", "disk_usage"
         )
         self.add_metric_card(
-            metrics_grid, 1, 1, "System Uptime", "uptime", ""
+            metrics_grid, 1, 1, "System Uptime", "uptime"
         )
 
         layout.addLayout(metrics_grid)
@@ -367,6 +403,7 @@ class MainWindow(QMainWindow):
 
         details_title = QLabel("System Details")
         details_title.setObjectName("panel_title")
+
         details_layout.addWidget(details_title)
 
         detail_fields = [
@@ -384,24 +421,25 @@ class MainWindow(QMainWindow):
         for label_text, key in detail_fields:
             row = QHBoxLayout()
 
-            label = QLabel(label_text)
-            label.setObjectName("muted_text")
+            field_label = QLabel(label_text)
+            field_label.setObjectName("muted_text")
 
-            value = QLabel("Loading...")
-            value.setWordWrap(True)
-            value.setTextInteractionFlags(
+            value_label = QLabel("Loading...")
+            value_label.setWordWrap(True)
+            value_label.setTextInteractionFlags(
                 Qt.TextInteractionFlag.TextSelectableByMouse
             )
 
-            row.addWidget(label, 1)
-            row.addWidget(value, 2)
+            row.addWidget(field_label, 1)
+            row.addWidget(value_label, 2)
 
             details_layout.addLayout(row)
-            self.system_labels[key] = value
+
+            self.system_labels[key] = value_label
 
         layout.addWidget(details_panel)
 
-    def add_metric_card(self, grid, row, column, title, key, suffix):
+    def add_metric_card(self, grid, row, column, title, key):
         panel = QFrame()
         panel.setObjectName("panel")
 
@@ -414,20 +452,23 @@ class MainWindow(QMainWindow):
 
         value_label = QLabel("Loading...")
         value_label.setObjectName("metric_value")
+        value_label.setMinimumHeight(32)
 
         panel_layout.addWidget(title_label)
         panel_layout.addWidget(value_label)
 
         if key in ("cpu_usage", "ram_usage", "disk_usage"):
-            progress = QProgressBar()
-            progress.setRange(0, 100)
-            progress.setValue(0)
-            progress.setTextVisible(False)
+            progress_bar = QProgressBar()
+            progress_bar.setRange(0, 100)
+            progress_bar.setValue(0)
+            progress_bar.setTextVisible(False)
 
-            panel_layout.addWidget(progress)
-            self.system_progress_bars[key] = progress
+            panel_layout.addWidget(progress_bar)
+
+            self.system_progress_bars[key] = progress_bar
 
         grid.addWidget(panel, row, column)
+
         self.system_labels[key] = value_label
 
     def build_placeholder_page(self, layout, page_name):
@@ -446,29 +487,46 @@ class MainWindow(QMainWindow):
         layout.addWidget(panel)
 
     def refresh_system_info(self):
+        """Refresh all system metrics and details."""
+
         info = get_system_info()
 
-        self.system_labels["cpu_usage"].setText(
-            f'{info["cpu_usage"]:.1f}%'
-        )
-        self.system_labels["ram_usage"].setText(
-            f'{info["ram_usage"]:.1f}%'
-        )
-        self.system_labels["disk_usage"].setText(
-            f'{info["disk_usage"]:.1f}%'
-        )
-        self.system_labels["uptime"].setText(info["uptime"])
+        # CPU usage
+        cpu_usage = info["cpu_usage"]
 
+        self.system_labels["cpu_usage"].setText(
+            f"{cpu_usage:.1f}%"
+        )
         self.system_progress_bars["cpu_usage"].setValue(
-            round(info["cpu_usage"])
+            round(cpu_usage)
+        )
+
+        # Memory usage
+        ram_usage = info["ram_usage"]
+
+        self.system_labels["ram_usage"].setText(
+            f"{ram_usage:.1f}%"
         )
         self.system_progress_bars["ram_usage"].setValue(
-            round(info["ram_usage"])
-        )
-        self.system_progress_bars["disk_usage"].setValue(
-            round(info["disk_usage"])
+            round(ram_usage)
         )
 
+        # Disk usage
+        disk_usage = info["disk_usage"]
+
+        self.system_labels["disk_usage"].setText(
+            f"{disk_usage:.1f}%"
+        )
+        self.system_progress_bars["disk_usage"].setValue(
+            round(disk_usage)
+        )
+
+        # System uptime
+        self.system_labels["uptime"].setText(
+            info["uptime"]
+        )
+
+        # System details
         detail_values = {
             "computer_name": info["computer_name"],
             "operating_system": info["operating_system"],

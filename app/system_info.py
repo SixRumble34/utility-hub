@@ -10,15 +10,10 @@ BOOT_TIME = psutil.boot_time()
 
 
 def get_system_info():
-    """Collect basic system information and current resource usage."""
+    """Collect current system information and resource usage."""
 
     memory = psutil.virtual_memory()
-
-    if platform.system() == "Windows":
-        disk_path = "C:\\"
-    else:
-        disk_path = "/"
-
+    disk_path = "C:\\" if platform.system() == "Windows" else "/"
     disk = psutil.disk_usage(disk_path)
 
     uptime_seconds = max(0, int(time.time() - BOOT_TIME))
@@ -30,7 +25,8 @@ def get_system_info():
         "architecture": platform.machine(),
         "processor": platform.processor() or "Unavailable",
         "logical_cores": psutil.cpu_count(logical=True) or "Unavailable",
-        "cpu_usage": psutil.cpu_percent(interval=0.2),
+        "python_version": platform.python_version(),
+        "cpu_usage": psutil.cpu_percent(interval=None),
         "ram_used_gb": round(memory.used / (1024 ** 3), 2),
         "ram_total_gb": round(memory.total / (1024 ** 3), 2),
         "ram_usage": memory.percent,
@@ -38,5 +34,4 @@ def get_system_info():
         "disk_total_gb": round(disk.total / (1024 ** 3), 2),
         "disk_usage": disk.percent,
         "uptime": str(timedelta(seconds=uptime_seconds)),
-        "python_version": platform.python_version(),
     }
