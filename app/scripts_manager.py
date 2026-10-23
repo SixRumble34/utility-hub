@@ -16,6 +16,7 @@ class ScriptManager(QObject):
 
         self.project_root = Path(__file__).resolve().parent.parent
         self.scripts_directory = self.project_root / "scripts"
+        self.stop_requested = False
 
         self.stop_timer = QTimer(self)
         self.stop_timer.setSingleShot(True)
@@ -107,11 +108,11 @@ class ScriptManager(QObject):
             )
             return False
 
+        self.stop_requested = False
+
         self.process.setWorkingDirectory(str(self.project_root))
         self.process.setProgram(sys.executable)
-        self.process.setArguments(
-            ["-u", str(script_path)]
-        )
+        self.process.setArguments(["-u", str(script_path)])
         self.process.start()
 
         return True
@@ -122,6 +123,7 @@ class ScriptManager(QObject):
         if not self.is_running():
             return
 
+        self.stop_requested = True
         self.process.terminate()
         self.stop_timer.start()
 
@@ -157,7 +159,8 @@ class ScriptManager(QObject):
         self.read_standard_error()
 
         succeeded = (
-            exit_code == 0
+            not self.stop_requested
+            and exit_code == 0
             and exit_status == QProcess.ExitStatus.NormalExit
         )
 

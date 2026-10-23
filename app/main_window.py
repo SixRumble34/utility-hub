@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.notifications import DesktopNotifications
 from app.scripts_manager import ScriptManager
 from app.style import APP_STYLESHEET
 from app.system_info import get_system_info
@@ -38,6 +39,10 @@ class MainWindow(QMainWindow):
         self.system_labels = {}
         self.system_progress_bars = {}
 
+        # Desktop notification handler.
+        self.notifications = DesktopNotifications(self)
+
+        # Script execution manager.
         self.script_manager = ScriptManager(self)
         self.script_entries = []
 
@@ -55,7 +60,6 @@ class MainWindow(QMainWindow):
         )
 
         self.build_interface()
-
         self.refresh_system_info()
 
         self.system_refresh_timer = QTimer(self)
@@ -642,7 +646,7 @@ class MainWindow(QMainWindow):
         )
 
     def run_selected_script(self):
-        """Run the currently selected script."""
+        """Run the selected script and notify the user."""
 
         if self.script_manager.is_running():
             return
@@ -658,6 +662,7 @@ class MainWindow(QMainWindow):
             return
 
         script_path = item.data(Qt.ItemDataRole.UserRole)
+        script_name = item.text()
 
         self.script_output.clear()
         self.script_status_label.setText("Starting script...")
@@ -672,6 +677,17 @@ class MainWindow(QMainWindow):
                 "Unable to start script."
             )
             self.run_script_button.setEnabled(True)
+
+            self.notifications.notify(
+                "Utility Hub - Script Error",
+                f"Could not start {script_name}. Check the execution output.",
+            )
+            return
+
+        self.notifications.notify(
+            "Utility Hub - Script Started",
+            f"{script_name} is now running.",
+        )
 
     def stop_selected_script(self):
         """Request the running script to stop."""
@@ -714,7 +730,7 @@ class MainWindow(QMainWindow):
             self.script_status_label.setText("Running...")
 
     def handle_script_finished(self, exit_code, succeeded):
-        """Display the final execution result."""
+        """Display the final result and send a desktop notification."""
 
         if succeeded:
             self.script_status_label.setText(
@@ -723,12 +739,23 @@ class MainWindow(QMainWindow):
             self.script_output.appendPlainText(
                 f"\n[Utility Hub] Script completed with exit code {exit_code}."
             )
+
+            self.notifications.notify(
+                "Utility Hub - Script Completed",
+                f"The script finished successfully (exit code {exit_code}).",
+            )
+
         else:
             self.script_status_label.setText(
                 f"Failed or stopped (exit code {exit_code})."
             )
             self.script_output.appendPlainText(
                 f"\n[Utility Hub] Script exited with code {exit_code}."
+            )
+
+            self.notifications.notify(
+                "Utility Hub - Script Failed",
+                f"The script failed or stopped (exit code {exit_code}).",
             )
 
         self.run_script_button.setEnabled(
