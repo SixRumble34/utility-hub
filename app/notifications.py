@@ -8,6 +8,9 @@ from PySide6.QtWidgets import (
 class DesktopNotifications:
     """Display desktop notifications for Utility Hub."""
 
+    STARTED_DURATION_MS = 5000
+    RESULT_DURATION_MS = 60000
+
     def __init__(self, parent=None):
         self.tray_icon = QSystemTrayIcon(parent)
 
@@ -24,7 +27,12 @@ class DesktopNotifications:
             QSystemTrayIcon.isSystemTrayAvailable()
         )
 
-    def notify(self, title, message, duration=5000):
+    def notify(
+        self,
+        title,
+        message,
+        duration=STARTED_DURATION_MS,
+    ):
         """Request a desktop notification."""
 
         if not QSystemTrayIcon.isSystemTrayAvailable():

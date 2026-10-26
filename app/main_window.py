@@ -1,6 +1,11 @@
+from pathlib import Path
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -10,6 +15,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QInputDialog,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -57,6 +63,9 @@ class MainWindow(QMainWindow):
         )
         self.script_manager.running_changed.connect(
             self.handle_script_running_changed
+        )
+        self.script_manager.start_failed.connect(
+            self.handle_script_start_failed
         )
 
         self.build_interface()
@@ -447,12 +456,32 @@ class MainWindow(QMainWindow):
 
         library_buttons = QHBoxLayout()
 
+        add_folder_button = QPushButton("Add Folder")
+        add_folder_button.setObjectName("action_button")
+        add_folder_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        add_folder_button.clicked.connect(self.add_script_folder)
+
+        manage_folders_button = QPushButton("Manage Folders")
+        manage_folders_button.setObjectName("secondary_button")
+        manage_folders_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        manage_folders_button.clicked.connect(
+            self.manage_script_folders
+        )
+
         refresh_button = QPushButton("Refresh Library")
         refresh_button.setObjectName("secondary_button")
+        refresh_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
         refresh_button.clicked.connect(self.refresh_script_library)
 
+        library_buttons.addWidget(add_folder_button)
+        library_buttons.addWidget(manage_folders_button)
         library_buttons.addWidget(refresh_button)
-        library_buttons.addStretch()
 
         library_layout.addLayout(library_buttons)
         layout.addWidget(library_panel, 2)
@@ -505,6 +534,15 @@ class MainWindow(QMainWindow):
 
         controls.addWidget(self.run_script_button)
         controls.addWidget(self.stop_script_button)
+
+        preview_button = QPushButton("Preview Source")
+        preview_button.setObjectName("secondary_button")
+        preview_button.setCursor(
+            Qt.CursorShape.PointingHandCursor
+        )
+        preview_button.clicked.connect(self.preview_selected_script)
+        controls.addWidget(preview_button)
+
         controls.addStretch()
 
         details_layout.addLayout(controls)
@@ -540,8 +578,154 @@ class MainWindow(QMainWindow):
 
         self.refresh_script_library()
 
+    def add_script_folder(self):
+        """Choose and register an external script folder."""
+
+        folder_path = QFileDialog.getExistingDirectory(
+            self,
+            "Add Script Library Folder",
+            str(Path.home()),
+        )
+
+        if not folder_path:
+            return
+
+        added = self.script_manager.add_script_folder(folder_path)
+
+        if added:
+            self.refresh_script_library()
+            QMessageBox.information(
+                self,
+                "Script Folder Added",
+                f"Added script library folder:\n\n{folder_path}",
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Folder Not Added",
+                "That folder is already registered, or it could not be added.",
+            )
+
+    def manage_script_folders(self):
+        """Display registered folders and allow removal."""
+
+        folders = self.script_manager.get_script_folders()
+
+        if not folders:
+            QMessageBox.information(
+                self,
+                "Script Library Folders",
+                "No script folders are registered.",
+            )
+            return
+
+        folder_options = [str(folder) for folder in folders]
+        selected_folder, accepted = QInputDialog.getItem(
+            self,
+            "Manage Script Folders",
+            "Select a folder to remove:",
+            folder_options,
+            0,
+            False,
+        )
+
+        if not accepted or not selected_folder:
+            return
+
+        default_folder = self.script_manager.scripts_directory.resolve()
+
+        if Path(selected_folder).resolve() == default_folder:
+            QMessageBox.information(
+                self,
+                "Default Folder",
+                "The project's default scripts folder cannot be removed.",
+            )
+            return
+
+        confirmation = QMessageBox.question(
+            self,
+            "Remove Script Folder",
+            "Remove this folder from the Utility Hub library?\n\n"
+            f"{selected_folder}\n\n"
+            "The folder and its files will not be deleted.",
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return
+
+        removed = self.script_manager.remove_script_folder(
+            selected_folder
+        )
+
+        if removed:
+            self.refresh_script_library()
+            QMessageBox.information(
+                self,
+                "Folder Removed",
+                "The folder was removed from the script library.",
+            )
+
+    def preview_selected_script(self):
+        """Show the selected script's source without executing it."""
+
+        item = self.script_list.currentItem()
+
+        if item is None:
+            QMessageBox.information(
+                self,
+                "No Script Selected",
+                "Select a script before opening its preview.",
+            )
+            return
+
+        script_path = Path(item.data(Qt.ItemDataRole.UserRole))
+
+        try:
+            source_code = script_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            QMessageBox.warning(
+                self,
+                "Preview Unavailable",
+                f"Could not read this script:\n\n{error}",
+            )
+            return
+
+        preview_dialog = QDialog(self)
+        preview_dialog.setWindowTitle(
+            f"Script Preview - {script_path.name}"
+        )
+        preview_dialog.resize(800, 600)
+
+        dialog_layout = QVBoxLayout(preview_dialog)
+
+        path_label = QLabel(str(script_path))
+        path_label.setWordWrap(True)
+        path_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        dialog_layout.addWidget(path_label)
+
+        preview_editor = QPlainTextEdit()
+        preview_editor.setReadOnly(True)
+        preview_editor.setLineWrapMode(
+            QPlainTextEdit.LineWrapMode.NoWrap
+        )
+        preview_editor.setPlainText(source_code)
+        dialog_layout.addWidget(preview_editor, 1)
+
+        close_buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Close
+        )
+        close_buttons.rejected.connect(preview_dialog.reject)
+        dialog_layout.addWidget(close_buttons)
+
+        preview_dialog.exec()
+
     def refresh_script_library(self):
-        """Reload scripts from the scripts directory."""
+        """Reload scripts from all registered script folders."""
 
         selected_path = None
         current_item = self.script_list.currentItem()
@@ -569,10 +753,10 @@ class MainWindow(QMainWindow):
         if self.script_list.count() == 0:
             self.selected_script_label.setText("No scripts found")
             self.script_path_label.setText(
-                "Add Python files to the project's scripts folder."
+                "Add a folder containing Python scripts to get started."
             )
             self.script_description_label.setText(
-                "Python files directly inside scripts/ are discovered."
+                "Use Add Folder to include scripts from other locations."
             )
             self.run_script_button.setEnabled(False)
 
@@ -646,7 +830,7 @@ class MainWindow(QMainWindow):
         )
 
     def run_selected_script(self):
-        """Run the selected script and notify the user."""
+        """Run the selected script and handle immediate launch errors."""
 
         if self.script_manager.is_running():
             return
@@ -673,21 +857,16 @@ class MainWindow(QMainWindow):
         started = self.script_manager.run_script(script_path)
 
         if not started:
-            self.script_status_label.setText(
-                "Unable to start script."
+            self.script_status_label.setText("Unable to start script.")
+            self.run_script_button.setEnabled(
+                self.script_list.currentItem() is not None
             )
-            self.run_script_button.setEnabled(True)
 
             self.notifications.notify(
                 "Utility Hub - Script Error",
                 f"Could not start {script_name}. Check the execution output.",
+                duration=DesktopNotifications.RESULT_DURATION_MS,
             )
-            return
-
-        self.notifications.notify(
-            "Utility Hub - Script Started",
-            f"{script_name} is now running.",
-        )
 
     def stop_selected_script(self):
         """Request the running script to stop."""
@@ -718,7 +897,7 @@ class MainWindow(QMainWindow):
         self.script_output.ensureCursorVisible()
 
     def handle_script_running_changed(self, is_running):
-        """Update execution controls when the process state changes."""
+        """Update controls and notify when a script starts successfully."""
 
         self.run_script_button.setEnabled(
             not is_running
@@ -729,10 +908,52 @@ class MainWindow(QMainWindow):
         if is_running:
             self.script_status_label.setText("Running...")
 
+            current_item = self.script_list.currentItem()
+            script_name = (
+                current_item.text()
+                if current_item is not None
+                else "Selected script"
+            )
+
+            self.notifications.notify(
+                "Utility Hub - Script Started",
+                f"{script_name} has started successfully.",
+                duration=DesktopNotifications.STARTED_DURATION_MS,
+            )
+
+    def handle_script_start_failed(self, message):
+        """Notify the user when the process could not start."""
+
+        self.script_status_label.setText("Unable to start script.")
+        self.run_script_button.setEnabled(
+            self.script_list.currentItem() is not None
+        )
+        self.stop_script_button.setEnabled(False)
+
+        self.notifications.notify(
+            "Utility Hub - Script Error",
+            message,
+            duration=DesktopNotifications.RESULT_DURATION_MS,
+        )
+
     def handle_script_finished(self, exit_code, succeeded):
         """Display the final result and send a desktop notification."""
 
-        if succeeded:
+        if self.script_manager.stop_requested:
+            self.script_status_label.setText(
+                f"Script stopped (exit code {exit_code})."
+            )
+            self.script_output.appendPlainText(
+                f"\n[Utility Hub] Script was stopped (exit code {exit_code})."
+            )
+
+            self.notifications.notify(
+                "Utility Hub - Script Stopped",
+                "The script was stopped at your request.",
+                duration=DesktopNotifications.RESULT_DURATION_MS,
+            )
+
+        elif succeeded:
             self.script_status_label.setText(
                 f"Completed successfully (exit code {exit_code})."
             )
@@ -743,19 +964,21 @@ class MainWindow(QMainWindow):
             self.notifications.notify(
                 "Utility Hub - Script Completed",
                 f"The script finished successfully (exit code {exit_code}).",
+                duration=DesktopNotifications.RESULT_DURATION_MS,
             )
 
         else:
             self.script_status_label.setText(
-                f"Failed or stopped (exit code {exit_code})."
+                f"Failed (exit code {exit_code})."
             )
             self.script_output.appendPlainText(
-                f"\n[Utility Hub] Script exited with code {exit_code}."
+                f"\n[Utility Hub] Script failed with exit code {exit_code}."
             )
 
             self.notifications.notify(
                 "Utility Hub - Script Failed",
-                f"The script failed or stopped (exit code {exit_code}).",
+                f"The script failed with exit code {exit_code}.",
+                duration=DesktopNotifications.RESULT_DURATION_MS,
             )
 
         self.run_script_button.setEnabled(
