@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QFont, QTextCursor
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -20,6 +20,10 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QStackedWidget,
+    QStyle,
+    QSplitter,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -37,7 +41,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Utility Hub")
         self.resize(1150, 760)
         self.setMinimumSize(850, 600)
-
         self.setStyleSheet(APP_STYLESHEET)
 
         self.navigation_buttons = {}
@@ -45,12 +48,10 @@ class MainWindow(QMainWindow):
         self.system_labels = {}
         self.system_progress_bars = {}
 
-        # Desktop notification handler.
         self.notifications = DesktopNotifications(self)
-
-        # Script execution manager.
         self.script_manager = ScriptManager(self)
         self.script_entries = []
+        self.selected_script_path = None
 
         self.script_manager.output_received.connect(
             self.append_script_output
@@ -94,7 +95,6 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(content_area, 1)
 
         self.setCentralWidget(central_widget)
-
         self.show_page("Home")
 
     def build_sidebar(self):
@@ -110,7 +110,6 @@ class MainWindow(QMainWindow):
 
         app_title = QLabel("Utility Hub")
         app_title.setObjectName("app_title")
-
         layout.addWidget(app_title)
         layout.addSpacing(15)
 
@@ -128,14 +127,10 @@ class MainWindow(QMainWindow):
             button = QPushButton(f"{symbol}   {name}")
             button.setObjectName("nav_button")
             button.setCheckable(True)
-            button.setCursor(
-                Qt.CursorShape.PointingHandCursor
-            )
-
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.clicked.connect(
                 lambda checked=False, page=name: self.show_page(page)
             )
-
             layout.addWidget(button)
             self.navigation_buttons[name] = button
 
@@ -144,10 +139,7 @@ class MainWindow(QMainWindow):
         settings_button = QPushButton("⚙   Settings")
         settings_button.setObjectName("settings_button")
         settings_button.setCheckable(True)
-        settings_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
-
+        settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_button.clicked.connect(
             lambda checked=False: self.show_page("Settings")
         )
@@ -182,7 +174,6 @@ class MainWindow(QMainWindow):
 
         for page_name in page_names:
             page = self.build_page(page_name)
-
             self.pages[page_name] = page
             self.page_stack.addWidget(page)
 
@@ -213,7 +204,7 @@ class MainWindow(QMainWindow):
                 "Organize and launch your applications."
             ),
             "Scripts": (
-                "Discover, run, and monitor your Python scripts."
+                "Browse, run, and monitor your Python scripts."
             ),
             "Cybersecurity": (
                 "Your cybersecurity tools and lab shortcuts."
@@ -238,18 +229,14 @@ class MainWindow(QMainWindow):
 
         if page_name == "Home":
             self.build_home_page(layout)
-
         elif page_name == "System":
             self.build_system_page(layout)
-
         elif page_name == "Scripts":
             self.build_scripts_page(layout)
-
         else:
             self.build_placeholder_page(layout, page_name)
 
         layout.addStretch()
-
         return page
 
     def build_home_page(self, layout):
@@ -257,7 +244,6 @@ class MainWindow(QMainWindow):
 
         quick_access_title = QLabel("Quick Access")
         quick_access_title.setObjectName("panel_title")
-
         layout.addWidget(quick_access_title)
 
         quick_access_items = [
@@ -276,14 +262,10 @@ class MainWindow(QMainWindow):
             button = QPushButton(label)
             button.setObjectName("action_button")
             button.setMinimumHeight(60)
-            button.setCursor(
-                Qt.CursorShape.PointingHandCursor
-            )
-
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.clicked.connect(
                 lambda checked=False, page=target: self.show_page(page)
             )
-
             grid.addWidget(button, index // 2, index % 2)
 
         layout.addLayout(grid)
@@ -326,9 +308,7 @@ class MainWindow(QMainWindow):
 
         refresh_button = QPushButton("Refresh")
         refresh_button.setObjectName("action_button")
-        refresh_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
+        refresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh_button.clicked.connect(self.refresh_system_info)
 
         refresh_row.addWidget(refresh_button)
@@ -428,14 +408,18 @@ class MainWindow(QMainWindow):
         self.system_labels[key] = value_label
 
     def build_scripts_page(self, layout):
-        """Build the script library and execution interface."""
+        """Build a file-explorer-style script library and larger output console."""
 
+        browser_splitter = QSplitter(Qt.Orientation.Horizontal)
+        browser_splitter.setChildrenCollapsible(False)
+
+        # Script library tree.
         library_panel = QFrame()
         library_panel.setObjectName("panel")
 
         library_layout = QVBoxLayout(library_panel)
-        library_layout.setContentsMargins(16, 16, 16, 16)
-        library_layout.setSpacing(10)
+        library_layout.setContentsMargins(14, 14, 14, 14)
+        library_layout.setSpacing(8)
 
         library_title = QLabel("Script Library")
         library_title.setObjectName("panel_title")
@@ -443,14 +427,21 @@ class MainWindow(QMainWindow):
 
         self.script_search = QLineEdit()
         self.script_search.setObjectName("script_search")
-        self.script_search.setPlaceholderText("Search scripts...")
+        self.script_search.setPlaceholderText(
+            "Search folders and Python scripts..."
+        )
         self.script_search.textChanged.connect(self.filter_scripts)
         library_layout.addWidget(self.script_search)
 
-        self.script_list = QListWidget()
-        self.script_list.setMinimumHeight(100)
-        self.script_list.currentItemChanged.connect(
-            self.select_script
+        self.script_list = QTreeWidget()
+        self.script_list.setObjectName("script_tree")
+        self.script_list.setHeaderHidden(True)
+        self.script_list.setMinimumWidth(260)
+        self.script_list.setMinimumHeight(180)
+        self.script_list.setUniformRowHeights(True)
+        self.script_list.currentItemChanged.connect(self.select_script)
+        self.script_list.itemDoubleClicked.connect(
+            self.handle_script_item_double_clicked
         )
         library_layout.addWidget(self.script_list, 1)
 
@@ -458,42 +449,37 @@ class MainWindow(QMainWindow):
 
         add_folder_button = QPushButton("Add Folder")
         add_folder_button.setObjectName("action_button")
-        add_folder_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
+        add_folder_button.setCursor(Qt.CursorShape.PointingHandCursor)
         add_folder_button.clicked.connect(self.add_script_folder)
 
         manage_folders_button = QPushButton("Manage Folders")
         manage_folders_button.setObjectName("secondary_button")
-        manage_folders_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
+        manage_folders_button.setCursor(Qt.CursorShape.PointingHandCursor)
         manage_folders_button.clicked.connect(
             self.manage_script_folders
         )
 
-        refresh_button = QPushButton("Refresh Library")
+        refresh_button = QPushButton("Refresh")
         refresh_button.setObjectName("secondary_button")
-        refresh_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
+        refresh_button.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh_button.clicked.connect(self.refresh_script_library)
 
         library_buttons.addWidget(add_folder_button)
         library_buttons.addWidget(manage_folders_button)
         library_buttons.addWidget(refresh_button)
-
         library_layout.addLayout(library_buttons)
-        layout.addWidget(library_panel, 2)
 
+        browser_splitter.addWidget(library_panel)
+
+        # Selected folder or script details.
         details_panel = QFrame()
         details_panel.setObjectName("panel")
 
         details_layout = QVBoxLayout(details_panel)
         details_layout.setContentsMargins(16, 16, 16, 16)
-        details_layout.setSpacing(8)
+        details_layout.setSpacing(10)
 
-        details_title = QLabel("Script Details")
+        details_title = QLabel("Selected Item")
         details_title.setObjectName("panel_title")
         details_layout.addWidget(details_title)
 
@@ -503,26 +489,30 @@ class MainWindow(QMainWindow):
         details_layout.addWidget(self.selected_script_label)
 
         self.script_path_label = QLabel(
-            "Select a script to see its location."
+            "Select a folder or Python file."
         )
         self.script_path_label.setObjectName("muted_text")
         self.script_path_label.setWordWrap(True)
+        self.script_path_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         details_layout.addWidget(self.script_path_label)
 
         self.script_description_label = QLabel(
-            "Choose a script from the library."
+            "Expand a folder, then select a Python file to run or preview it."
         )
         self.script_description_label.setObjectName("muted_text")
         self.script_description_label.setWordWrap(True)
         details_layout.addWidget(self.script_description_label)
 
+        details_layout.addStretch()
+
         controls = QHBoxLayout()
 
         self.run_script_button = QPushButton("Run Script")
         self.run_script_button.setObjectName("action_button")
-        self.run_script_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
+        self.run_script_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.run_script_button.setEnabled(False)
         self.run_script_button.clicked.connect(self.run_selected_script)
 
         self.stop_script_button = QPushButton("Stop Script")
@@ -532,37 +522,55 @@ class MainWindow(QMainWindow):
             self.stop_selected_script
         )
 
-        controls.addWidget(self.run_script_button)
-        controls.addWidget(self.stop_script_button)
-
         preview_button = QPushButton("Preview Source")
         preview_button.setObjectName("secondary_button")
-        preview_button.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
+        preview_button.setCursor(Qt.CursorShape.PointingHandCursor)
         preview_button.clicked.connect(self.preview_selected_script)
+
+        controls.addWidget(self.run_script_button)
+        controls.addWidget(self.stop_script_button)
         controls.addWidget(preview_button)
 
-        controls.addStretch()
-
         details_layout.addLayout(controls)
+        browser_splitter.addWidget(details_panel)
+
+        browser_splitter.setStretchFactor(0, 3)
+        browser_splitter.setStretchFactor(1, 2)
+
+        # Larger output console below the library.
+        output_panel = QFrame()
+        output_panel.setObjectName("panel")
+
+        output_layout = QVBoxLayout(output_panel)
+        output_layout.setContentsMargins(14, 12, 14, 12)
+        output_layout.setSpacing(8)
+
+        output_header = QHBoxLayout()
+
+        output_title = QLabel("Script Runner Output")
+        output_title.setObjectName("panel_title")
+        output_header.addWidget(output_title)
+        output_header.addStretch()
 
         self.script_status_label = QLabel("Ready")
         self.script_status_label.setObjectName("status_text")
-        details_layout.addWidget(self.script_status_label)
+        output_header.addWidget(self.script_status_label)
 
-        output_title = QLabel("Execution Output")
-        output_title.setObjectName("panel_title")
-        details_layout.addWidget(output_title)
+        output_layout.addLayout(output_header)
 
         self.script_output = QPlainTextEdit()
         self.script_output.setObjectName("script_output")
         self.script_output.setReadOnly(True)
         self.script_output.setPlaceholderText(
-            "Script output and errors will appear here."
+            "Run a script to see its output here. "
+            "Standard output and errors will appear live."
         )
-        self.script_output.setMinimumHeight(100)
-        details_layout.addWidget(self.script_output, 1)
+        self.script_output.setLineWrapMode(
+            QPlainTextEdit.LineWrapMode.NoWrap
+        )
+        self.script_output.setMinimumHeight(220)
+        self.script_output.setFont(QFont("Consolas", 10))
+        output_layout.addWidget(self.script_output, 1)
 
         output_buttons = QHBoxLayout()
 
@@ -572,11 +580,27 @@ class MainWindow(QMainWindow):
 
         output_buttons.addWidget(clear_output_button)
         output_buttons.addStretch()
+        output_layout.addLayout(output_buttons)
 
-        details_layout.addLayout(output_buttons)
-        layout.addWidget(details_panel, 3)
+        page_splitter = QSplitter(Qt.Orientation.Vertical)
+        page_splitter.setChildrenCollapsible(False)
+        page_splitter.addWidget(browser_splitter)
+        page_splitter.addWidget(output_panel)
+        page_splitter.setStretchFactor(0, 2)
+        page_splitter.setStretchFactor(1, 5)
+        page_splitter.setSizes([260, 470])
+
+        layout.addWidget(page_splitter, 1)
 
         self.refresh_script_library()
+
+    def handle_script_item_double_clicked(self, item, column):
+        """Expand or collapse a folder when double-clicked."""
+
+        item_type = item.data(0, Qt.ItemDataRole.UserRole + 1)
+
+        if item_type == "folder":
+            item.setExpanded(not item.isExpanded())
 
     def add_script_folder(self):
         """Choose and register an external script folder."""
@@ -620,6 +644,7 @@ class MainWindow(QMainWindow):
             return
 
         folder_options = [str(folder) for folder in folders]
+
         selected_folder, accepted = QInputDialog.getItem(
             self,
             "Manage Script Folders",
@@ -668,20 +693,38 @@ class MainWindow(QMainWindow):
                 "The folder was removed from the script library.",
             )
 
-    def preview_selected_script(self):
-        """Show the selected script's source without executing it."""
+    def get_selected_script_path(self):
+        """Return the selected Python script path, or None for folders."""
 
         item = self.script_list.currentItem()
 
         if item is None:
+            return None
+
+        item_type = item.data(0, Qt.ItemDataRole.UserRole + 1)
+
+        if item_type != "script":
+            return None
+
+        raw_path = item.data(0, Qt.ItemDataRole.UserRole)
+
+        if not raw_path:
+            return None
+
+        return Path(raw_path)
+
+    def preview_selected_script(self):
+        """Show the selected Python file's source without executing it."""
+
+        script_path = self.get_selected_script_path()
+
+        if script_path is None:
             QMessageBox.information(
                 self,
-                "No Script Selected",
-                "Select a script before opening its preview.",
+                "No Python File Selected",
+                "Select a Python file in the library before opening its preview.",
             )
             return
-
-        script_path = Path(item.data(Qt.ItemDataRole.UserRole))
 
         try:
             source_code = script_path.read_text(encoding="utf-8")
@@ -697,7 +740,7 @@ class MainWindow(QMainWindow):
         preview_dialog.setWindowTitle(
             f"Script Preview - {script_path.name}"
         )
-        preview_dialog.resize(800, 600)
+        preview_dialog.resize(900, 650)
 
         dialog_layout = QVBoxLayout(preview_dialog)
 
@@ -713,6 +756,7 @@ class MainWindow(QMainWindow):
         preview_editor.setLineWrapMode(
             QPlainTextEdit.LineWrapMode.NoWrap
         )
+        preview_editor.setFont(QFont("Consolas", 10))
         preview_editor.setPlainText(source_code)
         dialog_layout.addWidget(preview_editor, 1)
 
@@ -725,60 +769,225 @@ class MainWindow(QMainWindow):
         preview_dialog.exec()
 
     def refresh_script_library(self):
-        """Reload scripts from all registered script folders."""
+        """Rebuild the tree from all registered folders and discovered scripts."""
 
-        selected_path = None
-        current_item = self.script_list.currentItem()
-
-        if current_item is not None:
-            selected_path = current_item.data(
-                Qt.ItemDataRole.UserRole
-            )
-
+        selected_path = self.selected_script_path
         self.script_list.clear()
         self.script_entries = self.script_manager.discover_scripts()
 
-        for script in self.script_entries:
-            item = QListWidgetItem(script["name"])
-            item.setData(
-                Qt.ItemDataRole.UserRole,
-                str(script["path"]),
+        scripts_by_path = {
+            str(Path(entry["path"]).resolve()).casefold(): entry
+            for entry in self.script_entries
+        }
+
+        folders = self.script_manager.get_script_folders()
+
+        for registered_folder in folders:
+            root_path = Path(registered_folder).resolve()
+
+            if not root_path.is_dir():
+                continue
+
+            root_name = root_path.name or str(root_path)
+            root_item = QTreeWidgetItem([root_name])
+            root_item.setData(
+                0, Qt.ItemDataRole.UserRole, str(root_path)
             )
-            item.setToolTip(script["filename"])
-            self.script_list.addItem(item)
+            root_item.setData(
+                0, Qt.ItemDataRole.UserRole + 1, "folder"
+            )
+            root_item.setToolTip(0, str(root_path))
+            root_item.setIcon(
+                0,
+                self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon),
+            )
 
-            if str(script["path"]) == selected_path:
-                self.script_list.setCurrentItem(item)
+            self.script_list.addTopLevelItem(root_item)
 
-        if self.script_list.count() == 0:
-            self.selected_script_label.setText("No scripts found")
+            self.populate_script_tree(
+                root_item,
+                root_path,
+                scripts_by_path,
+            )
+
+            root_item.setExpanded(True)
+
+        self.filter_scripts(self.script_search.text())
+
+        if self.script_list.topLevelItemCount() == 0:
+            self.selected_script_label.setText("No script folders found")
             self.script_path_label.setText(
                 "Add a folder containing Python scripts to get started."
             )
             self.script_description_label.setText(
                 "Use Add Folder to include scripts from other locations."
             )
+            self.selected_script_path = None
             self.run_script_button.setEnabled(False)
+            return
 
-        elif self.script_list.currentItem() is None:
-            self.script_list.setCurrentRow(0)
+        if selected_path:
+            self.select_tree_item_by_path(selected_path)
 
-        self.filter_scripts(self.script_search.text())
+        if self.script_list.currentItem() is None:
+            self.script_list.setCurrentItem(
+                self.script_list.topLevelItem(0)
+            )
+
+    def populate_script_tree(self, parent_item, folder_path, scripts_by_path):
+        """Add subfolders and Python files beneath a library folder."""
+
+        try:
+            children = sorted(
+                folder_path.iterdir(),
+                key=lambda path: (
+                    not path.is_dir(),
+                    path.name.casefold(),
+                ),
+            )
+        except OSError:
+            parent_item.setToolTip(
+                0, f"Cannot read folder: {folder_path}"
+            )
+            return
+
+        ignored_directories = {
+            "__pycache__",
+            ".git",
+            ".venv",
+            "venv",
+            "node_modules",
+        }
+
+        for child_path in children:
+            if child_path.name.startswith("."):
+                continue
+
+            if child_path.is_dir():
+                if child_path.name in ignored_directories:
+                    continue
+
+                folder_item = QTreeWidgetItem([child_path.name])
+                folder_item.setData(
+                    0,
+                    Qt.ItemDataRole.UserRole,
+                    str(child_path.resolve()),
+                )
+                folder_item.setData(
+                    0,
+                    Qt.ItemDataRole.UserRole + 1,
+                    "folder",
+                )
+                folder_item.setToolTip(0, str(child_path))
+                folder_item.setIcon(
+                    0,
+                    self.style().standardIcon(
+                        QStyle.StandardPixmap.SP_DirIcon
+                    ),
+                )
+
+                parent_item.addChild(folder_item)
+
+                self.populate_script_tree(
+                    folder_item,
+                    child_path,
+                    scripts_by_path,
+                )
+                continue
+
+            if not child_path.is_file():
+                continue
+
+            if child_path.suffix.lower() != ".py":
+                continue
+
+            if child_path.name.startswith("_"):
+                continue
+
+            resolved_path = str(child_path.resolve())
+            script = scripts_by_path.get(resolved_path.casefold())
+
+            if script is None:
+                continue
+
+            file_item = QTreeWidgetItem([child_path.name])
+            file_item.setData(
+                0,
+                Qt.ItemDataRole.UserRole,
+                resolved_path,
+            )
+            file_item.setData(
+                0,
+                Qt.ItemDataRole.UserRole + 1,
+                "script",
+            )
+            file_item.setToolTip(
+                0,
+                f"{resolved_path}\n{script['description']}",
+            )
+            file_item.setIcon(
+                0,
+                self.style().standardIcon(
+                    QStyle.StandardPixmap.SP_FileIcon
+                ),
+            )
+
+            parent_item.addChild(file_item)
+
+    def select_tree_item_by_path(self, target_path):
+        """Find and select a tree item by its stored path."""
+
+        target = str(Path(target_path).resolve()).casefold()
+
+        stack = [
+            self.script_list.topLevelItem(index)
+            for index in range(self.script_list.topLevelItemCount())
+        ]
+
+        while stack:
+            item = stack.pop()
+            item_path = item.data(0, Qt.ItemDataRole.UserRole)
+
+            if (
+                item_path
+                and str(Path(item_path).resolve()).casefold() == target
+            ):
+                # Expand the item's ancestors so the selection is visible.
+                parent = item.parent()
+
+                while parent is not None:
+                    parent.setExpanded(True)
+                    parent = parent.parent()
+
+                self.script_list.setCurrentItem(item)
+                return
+
+            for index in range(item.childCount()):
+                stack.append(item.child(index))
 
     def filter_scripts(self, search_text):
-        """Filter visible scripts by name or filename."""
+        """Filter the tree while retaining folders containing matches."""
 
-        search_text = search_text.strip().lower()
+        query = search_text.strip().casefold()
 
-        for index in range(self.script_list.count()):
-            item = self.script_list.item(index)
-            name = item.text().lower()
-            filename = item.toolTip().lower()
+        def apply_filter(item):
+            matches_self = query in item.text(0).casefold()
+            child_matches = False
 
-            item.setHidden(
-                search_text not in name
-                and search_text not in filename
-            )
+            for index in range(item.childCount()):
+                if apply_filter(item.child(index)):
+                    child_matches = True
+
+            visible = not query or matches_self or child_matches
+            item.setHidden(not visible)
+
+            if query and child_matches:
+                item.setExpanded(True)
+
+            return visible
+
+        for index in range(self.script_list.topLevelItemCount()):
+            apply_filter(self.script_list.topLevelItem(index))
 
         current_item = self.script_list.currentItem()
 
@@ -786,45 +995,111 @@ class MainWindow(QMainWindow):
             self.script_list.setCurrentItem(None)
 
         if self.script_list.currentItem() is None:
-            for index in range(self.script_list.count()):
-                item = self.script_list.item(index)
+            first_visible = self.find_first_visible_script()
 
-                if not item.isHidden():
-                    self.script_list.setCurrentItem(item)
-                    break
+            if first_visible is not None:
+                self.script_list.setCurrentItem(first_visible)
+
+    def find_first_visible_script(self):
+        """Return the first visible Python file in the tree."""
+
+        stack = [
+            self.script_list.topLevelItem(index)
+            for index in reversed(
+                range(self.script_list.topLevelItemCount())
+            )
+        ]
+
+        while stack:
+            item = stack.pop()
+
+            if item.isHidden():
+                continue
+
+            item_type = item.data(
+                0, Qt.ItemDataRole.UserRole + 1
+            )
+
+            if item_type == "script":
+                return item
+
+            for index in reversed(range(item.childCount())):
+                stack.append(item.child(index))
+
+        return None
 
     def select_script(self, current_item, previous_item=None):
-        """Display details for the selected script."""
+        """Display details for a selected folder or Python file."""
 
         if current_item is None:
-            self.selected_script_label.setText("No script selected")
+            self.selected_script_label.setText("No item selected")
             self.script_path_label.setText(
-                "Select a script from the library."
+                "Select a folder or Python file."
             )
             self.script_description_label.setText("")
-            self.run_script_button.setEnabled(
-                not self.script_manager.is_running()
-            )
+            self.selected_script_path = None
+            self.run_script_button.setEnabled(False)
             return
 
-        script_path = current_item.data(Qt.ItemDataRole.UserRole)
+        item_type = current_item.data(
+            0, Qt.ItemDataRole.UserRole + 1
+        )
+        raw_path = current_item.data(
+            0, Qt.ItemDataRole.UserRole
+        )
+
+        if not raw_path:
+            return
+
+        item_path = Path(raw_path)
+        self.script_path_label.setText(str(item_path))
+
+        if item_type == "folder":
+            self.selected_script_path = None
+            self.selected_script_label.setText(
+                f"Folder: {item_path.name or item_path}"
+            )
+
+            try:
+                item_count = sum(1 for _ in item_path.iterdir())
+                description = (
+                    f"Folder • {item_count} direct items. "
+                    "Double-click to expand or collapse."
+                )
+            except OSError:
+                description = "Folder • Unable to read this location."
+
+            self.script_description_label.setText(description)
+            self.run_script_button.setEnabled(False)
+            return
+
+        script_path = str(item_path.resolve())
 
         script = next(
             (
                 entry
                 for entry in self.script_entries
-                if str(entry["path"]) == script_path
+                if str(Path(entry["path"]).resolve()) == script_path
             ),
             None,
         )
 
         if script is None:
+            self.selected_script_path = None
+            self.selected_script_label.setText(item_path.name)
+            self.script_description_label.setText(
+                "Script details are unavailable. Refresh the library."
+            )
+            self.run_script_button.setEnabled(False)
             return
 
-        self.selected_script_label.setText(script["filename"])
-        self.script_path_label.setText(str(script["path"]))
-        self.script_description_label.setText(script["description"])
-
+        self.selected_script_path = script_path
+        self.selected_script_label.setText(
+            f"Python Script: {script['filename']}"
+        )
+        self.script_description_label.setText(
+            script["description"]
+        )
         self.run_script_button.setEnabled(
             not self.script_manager.is_running()
         )
@@ -835,31 +1110,29 @@ class MainWindow(QMainWindow):
         if self.script_manager.is_running():
             return
 
-        item = self.script_list.currentItem()
+        script_path = self.get_selected_script_path()
 
-        if item is None:
+        if script_path is None:
             QMessageBox.information(
                 self,
-                "No Script Selected",
-                "Select a script before choosing Run Script.",
+                "No Python File Selected",
+                "Select a Python file before choosing Run Script.",
             )
             return
 
-        script_path = item.data(Qt.ItemDataRole.UserRole)
-        script_name = item.text()
+        script_name = script_path.name
 
         self.script_output.clear()
         self.script_status_label.setText("Starting script...")
-
         self.run_script_button.setEnabled(False)
         self.stop_script_button.setEnabled(False)
 
-        started = self.script_manager.run_script(script_path)
+        started = self.script_manager.run_script(str(script_path))
 
         if not started:
             self.script_status_label.setText("Unable to start script.")
             self.run_script_button.setEnabled(
-                self.script_list.currentItem() is not None
+                self.get_selected_script_path() is not None
             )
 
             self.notifications.notify(
@@ -901,17 +1174,17 @@ class MainWindow(QMainWindow):
 
         self.run_script_button.setEnabled(
             not is_running
-            and self.script_list.currentItem() is not None
+            and self.get_selected_script_path() is not None
         )
         self.stop_script_button.setEnabled(is_running)
 
         if is_running:
             self.script_status_label.setText("Running...")
 
-            current_item = self.script_list.currentItem()
+            current_path = self.get_selected_script_path()
             script_name = (
-                current_item.text()
-                if current_item is not None
+                current_path.name
+                if current_path is not None
                 else "Selected script"
             )
 
@@ -926,7 +1199,7 @@ class MainWindow(QMainWindow):
 
         self.script_status_label.setText("Unable to start script.")
         self.run_script_button.setEnabled(
-            self.script_list.currentItem() is not None
+            self.get_selected_script_path() is not None
         )
         self.stop_script_button.setEnabled(False)
 
@@ -982,7 +1255,7 @@ class MainWindow(QMainWindow):
             )
 
         self.run_script_button.setEnabled(
-            self.script_list.currentItem() is not None
+            self.get_selected_script_path() is not None
         )
         self.stop_script_button.setEnabled(False)
 
