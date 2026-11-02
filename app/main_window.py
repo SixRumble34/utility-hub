@@ -27,9 +27,9 @@ from PySide6.QtWidgets import (
 )
 
 from app.notifications import DesktopNotifications
-from app.scripts_manager import ScriptManager
+from app.script_tools.scripts_manager import ScriptManager
 from app.style import APP_STYLESHEET
-from app.system_info import get_system_info
+from app.system.system_info import get_system_info
 
 
 class MainWindow(QMainWindow):
